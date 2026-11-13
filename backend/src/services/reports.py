@@ -1,4 +1,4 @@
-import uuid,csv,io
+import uuid,csv,io,json
 from sqlalchemy import select
 from fastapi import HTTPException
 from src.models import Report,DeliveryReview,ScheduleRun
@@ -15,6 +15,13 @@ def create(db,payload,user):
 def export(db,id):
  report=db.get(Report,id)
  if not report:raise HTTPException(404,'报告不存在')
- run=require_completed(db,report.run_id);result=run.result;review=db.get(DeliveryReview,report.review_id);risk=result['risk'];counts={r['task_id']:r for r in risk['task_criticality']};names={t['task_id']:t['name'] for t in result['tasks']};buf=io.StringIO();writer=csv.DictWriter(buf,['run_id','checksum','review_version','task_id','task_name','duration_hours','es','ef','ls','lf','total_float','baseline_critical','critical_count','denominator','criticality','deadline_hours','deadline_tolerance_hours','on_time_count','on_time_probability','seed']);writer.writeheader()
- for t in result['baseline']['tasks']:writer.writerow({'run_id':run.id,'checksum':result['checksum'],'review_version':review.version,'task_id':t['task_id'],'task_name':names[t['task_id']],'duration_hours':t['duration'],'es':t['es'],'ef':t['ef'],'ls':t['ls'],'lf':t['lf'],'total_float':t['total_float'],'baseline_critical':t['critical'],'critical_count':counts[t['task_id']]['critical_count'],'denominator':risk['samples'],'criticality':counts[t['task_id']]['criticality'],'deadline_hours':risk['deadline'],'deadline_tolerance_hours':risk['deadline_tolerance_hours'],'on_time_count':risk['on_time_count'],'on_time_probability':risk['on_time_probability'],'seed':risk['seed']})
+ run=require_completed(db,report.run_id);result=run.result;review=db.get(DeliveryReview,report.review_id);risk=result['risk'];counts={r['task_id']:r for r in risk['task_criticality']};names={t['task_id']:t['name'] for t in result['tasks']};events=risk.get('events') or []
+ fields=['run_id','checksum','review_version','task_id','task_name','duration_hours','es','ef','ls','lf','total_float','baseline_critical','critical_count','denominator','criticality','deadline_hours','deadline_tolerance_hours','on_time_count','on_time_probability','seed']
+ if events:fields+=['event_model','event_ids','event_any_count','event_any_rate','event_occurrences']
+ buf=io.StringIO();writer=csv.DictWriter(buf,fields);writer.writeheader()
+ for t in result['baseline']['tasks']:
+  row={'run_id':run.id,'checksum':result['checksum'],'review_version':review.version,'task_id':t['task_id'],'task_name':names[t['task_id']],'duration_hours':t['duration'],'es':t['es'],'ef':t['ef'],'ls':t['ls'],'lf':t['lf'],'total_float':t['total_float'],'baseline_critical':t['critical'],'critical_count':counts[t['task_id']]['critical_count'],'denominator':risk['samples'],'criticality':counts[t['task_id']]['criticality'],'deadline_hours':risk['deadline'],'deadline_tolerance_hours':risk['deadline_tolerance_hours'],'on_time_count':risk['on_time_count'],'on_time_probability':risk['on_time_probability'],'seed':risk['seed']}
+  if events:
+   row.update({'event_model':risk.get('event_model'),'event_ids':'|'.join(e['event_id'] for e in events),'event_any_count':risk.get('event_any_count'),'event_any_rate':risk.get('event_any_rate'),'event_occurrences':json.dumps([{'event_id':e['event_id'],'occurrence_count':e['occurrence_count'],'denominator':e['denominator'],'occurrence_rate':e['occurrence_rate']} for e in events],ensure_ascii=False,sort_keys=True)})
+  writer.writerow(row)
  return chr(0xfeff)+buf.getvalue()

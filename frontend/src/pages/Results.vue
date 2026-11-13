@@ -1,1 +1,68 @@
-<script setup lang="ts">import {ref,computed,watch} from 'vue';import type {Workspace} from '../stores/workspace';import Heading from '../components/common/Heading.vue';import Empty from '../components/common/Empty.vue';import Status from '../components/common/Status.vue';import ScenarioStrip from '../components/ScenarioStrip.vue';import RiskSummary from '../components/RiskSummary.vue';import DagView from '../components/DagView.vue';import Histogram from '../components/Histogram.vue';import CriticalityBars from '../components/CriticalityBars.vue';import CpmTable from '../components/CpmTable.vue';import {num,short} from '../utils/format';const props=defineProps<{data:Workspace;selected:string}>();const id=ref(props.selected||'demo-run'),tab=ref('dag');watch(()=>props.selected,v=>{if(v)id.value=v});const run=computed(()=>props.data.runs.find(r=>r.id===id.value)||props.data.runs[0]);const result=computed(()=>run.value?.status==='completed'?run.value.result:null);const scenario=computed(()=>props.data.scenarios.find(s=>s.id===run.value?.scenario_id));</script><template><Heading index="05 / BASELINE & UNCERTAINTY" title="同一份依赖，两层时间证据。" detail="基线关键任务取最可能工期；模拟关键度逐次重算。所有图形均读取worker持久化结果。"/><label class="selector">选择推演运行<select aria-label="选择推演运行" v-model="id"><option v-for="r in data.runs" :key="r.id" :value="r.id">{{data.scenarios.find(s=>s.id===r.scenario_id)?.name}} · {{r.status}} · {{short(r.id)}}</option></select></label><Empty v-if="!run">在风险情景页提交一次后台推演，完成后在此查看DAG、时差和风险。</Empty><template v-else><div class="result-meta"><Status :value="run.status"/><span>RUN {{short(run.id)}}</span><span v-if="result">SHA256 {{short(result.checksum)}}</span></div><p v-if="run.status==='queued'||run.status==='running'" role="status" class="notice">后台正在逐次抽样并重算关键路径，完成后自动刷新。</p><p v-if="run.status==='failed'" role="alert" class="notice error">{{run.error}} · 调整输入后新建情景重试，失败记录保留。</p><template v-if="result"><ScenarioStrip v-if="scenario" :scenario="scenario"/><RiskSummary :result="result"/><div class="tabs"><button :class="{active:tab==='dag'}" @click="tab='dag'">CPM依赖图</button><button :class="{active:tab==='distribution'}" @click="tab='distribution'">工期分布</button><button :class="{active:tab==='criticality'}" @click="tab='criticality'">任务关键度</button></div><section class="evidence-section"><h2>{{tab==='dag'?'最可能工期·FS关键依赖':tab==='distribution'?'独立工期·完工样本':'逐任务关键次数与分母'}}</h2><DagView v-if="tab==='dag'" :tasks="result.tasks" :edges="result.edges" :baseline="result.baseline"/><template v-else-if="tab==='distribution'"><Histogram :risk="result.risk"/><div class="quantiles"><span v-for="(v,k) in result.risk.quantiles" :key="k">{{k}} <b>{{num(v)}}h</b></span><span>均值 <b>{{num(result.risk.mean_finish)}}h</b></span></div><p class="muted">达标事件：项目完工≤{{result.risk.deadline}}小时 + {{result.risk.deadline_tolerance_hours}}小时浮点容差。分位采用(n−1)q位置线性插值；有限样本结果，不是承诺。</p><details><summary>全部完工样本 / 小时</summary><p class="mono">{{result.risk.finish_times.map(v=>num(v,4)).join(' / ')}}</p></details></template><CriticalityBars v-else :risk="result.risk" :tasks="result.tasks"/></section><section><div class="section-rule"><h2>CPM前后向时刻 / 小时</h2><span>LF基准={{num(result.baseline.project_finish)}}h实际完工，外部deadline不参与</span></div><CpmTable :baseline="result.baseline" :tasks="result.tasks"/></section><details><summary>模型假设、快照校验和与边界</summary><p v-for="s in result.assumptions" :key="s">{{s}}</p><p class="mono">{{result.checksum}}</p><div class="table-scroll"><table><thead><tr><th>任务</th><th>a / m / b</th><th>alpha</th><th>beta</th><th>点质量</th></tr></thead><tbody><tr v-for="t in result.risk.ranges" :key="t.task_id"><td>{{t.task_id}}</td><td>{{t.a}} / {{t.m}} / {{t.b}}</td><td>{{t.alpha===null?'—':num(t.alpha,4)}}</td><td>{{t.beta===null?'—':num(t.beta,4)}}</td><td>{{t.point_mass?'是':'否'}}</td></tr></tbody></table></div></details></template></template></template>
+<script setup lang="ts">
+import {ref,computed,watch} from 'vue';
+import type {Workspace} from '../stores/workspace';
+import Heading from '../components/common/Heading.vue';
+import Empty from '../components/common/Empty.vue';
+import Status from '../components/common/Status.vue';
+import ScenarioStrip from '../components/ScenarioStrip.vue';
+import RiskSummary from '../components/RiskSummary.vue';
+import DagView from '../components/DagView.vue';
+import Histogram from '../components/Histogram.vue';
+import CriticalityBars from '../components/CriticalityBars.vue';
+import CpmTable from '../components/CpmTable.vue';
+import EventImpact from '../components/EventImpact.vue';
+import {num,short,pct} from '../utils/format';
+const props=defineProps<{data:Workspace;selected:string}>();
+const id=ref(props.selected||'demo-run'),tab=ref('dag');
+watch(()=>props.selected,v=>{if(v)id.value=v});
+const run=computed(()=>props.data.runs.find(r=>r.id===id.value)||props.data.runs[0]);
+const result=computed(()=>run.value?.status==='completed'?run.value.result:null);
+const scenario=computed(()=>props.data.scenarios.find(s=>s.id===run.value?.scenario_id));
+const events=computed(()=>result.value?.risk.events??[]);
+watch(events,list=>{if(!list.length&&tab.value==='events')tab.value='distribution'});
+const model=computed(()=>events.value.length?'独立工期 + 共因停工事件':'独立工期 Beta-PERT');
+</script>
+<template>
+ <Heading index="05 / BASELINE & UNCERTAINTY" title="同一份依赖，两层时间证据。" detail="基线关键任务取最可能工期；模拟关键度逐次重算。所有图形均读取worker持久化结果。"/>
+ <label class="selector">选择推演运行<select aria-label="选择推演运行" v-model="id"><option v-for="r in data.runs" :key="r.id" :value="r.id">{{data.scenarios.find(s=>s.id===r.scenario_id)?.name}} · {{r.status}} · {{short(r.id)}}</option></select></label>
+ <Empty v-if="!run">在风险情景页提交一次后台推演，完成后在此查看DAG、时差和风险。</Empty>
+ <template v-else>
+  <div class="result-meta"><Status :value="run.status"/><span>RUN {{short(run.id)}}</span><span v-if="result">SHA256 {{short(result.checksum)}}</span></div>
+  <p v-if="run.status==='queued'||run.status==='running'" role="status" class="notice">后台正在逐次抽样并重算关键路径，完成后自动刷新。</p>
+  <p v-if="run.status==='failed'" role="alert" class="notice error">{{run.error}} · 调整输入后新建情景重试，失败记录保留。</p>
+  <template v-if="result">
+   <ScenarioStrip v-if="scenario" :scenario="scenario"/>
+   <RiskSummary :result="result"/>
+   <p v-if="events.length" class="notice event-notice">本情景叠加 {{events.length}} 个共因停工事件：每样本每事件只判定一次，命中后延误累加到关联任务；已计入完工分布与达标率。</p>
+   <div class="tabs">
+    <button :class="{active:tab==='dag'}" @click="tab='dag'">CPM依赖图</button>
+    <button :class="{active:tab==='distribution'}" @click="tab='distribution'">完工分布</button>
+    <button :class="{active:tab==='events'}" v-if="events.length" @click="tab='events'">停工事件</button>
+    <button :class="{active:tab==='criticality'}" @click="tab='criticality'">任务关键度</button>
+   </div>
+   <section class="evidence-section">
+    <h2>{{tab==='dag'?'最可能工期·FS关键依赖':tab==='distribution'?model+'·完工样本':tab==='events'?'共因停工事件·发生次数与延误':'逐任务关键次数与分母'}}</h2>
+    <DagView v-if="tab==='dag'" :tasks="result.tasks" :edges="result.edges" :baseline="result.baseline"/>
+    <template v-else-if="tab==='distribution'">
+     <Histogram :risk="result.risk"/>
+     <div class="quantiles"><span v-for="(v,k) in result.risk.quantiles" :key="k">{{k}} <b>{{num(v)}}h</b></span><span>均值 <b>{{num(result.risk.mean_finish)}}h</b></span><span>达标率 <b>{{pct(result.risk.on_time_probability)}}</b></span></div>
+     <p class="muted">达标事件：项目完工≤{{result.risk.deadline}}小时 + {{result.risk.deadline_tolerance_hours}}小时浮点容差。分位采用(n−1)q位置线性插值；有限样本结果，不是承诺。</p>
+     <details><summary>全部完工样本 / 小时</summary><p class="mono">{{result.risk.finish_times.map(v=>num(v,4)).join(' / ')}}</p></details>
+    </template>
+    <EventImpact v-else-if="tab==='events'&&events.length" :risk="result.risk" :tasks="result.tasks"/>
+    <CriticalityBars v-else :risk="result.risk" :tasks="result.tasks"/>
+   </section>
+   <section>
+    <div class="section-rule"><h2>CPM前后向时刻 / 小时</h2><span>LF基准={{num(result.baseline.project_finish)}}h实际完工，外部deadline不参与</span></div>
+    <CpmTable :baseline="result.baseline" :tasks="result.tasks"/>
+   </section>
+   <details>
+    <summary>模型假设、快照校验和与边界</summary>
+    <p v-for="s in result.assumptions" :key="s">{{s}}</p>
+    <p class="mono">{{result.checksum}}</p>
+    <div class="table-scroll"><table><thead><tr><th>任务</th><th>a / m / b</th><th>alpha</th><th>beta</th><th>点质量</th></tr></thead><tbody><tr v-for="t in result.risk.ranges" :key="t.task_id"><td>{{t.task_id}}</td><td>{{t.a}} / {{t.m}} / {{t.b}}</td><td>{{t.alpha===null?'—':num(t.alpha,4)}}</td><td>{{t.beta===null?'—':num(t.beta,4)}}</td><td>{{t.point_mass?'是':'否'}}</td></tr></tbody></table></div>
+    <div v-if="events.length" class="table-scroll"><table><thead><tr><th>事件ID</th><th>名称</th><th>概率</th><th>固定延误</th><th>关联任务</th><th>命中样本</th></tr></thead><tbody><tr v-for="e in events" :key="e.event_id"><td>{{e.event_id}}</td><td>{{e.name}}</td><td>{{e.probability}}</td><td>{{e.delay_hours}}h</td><td>{{e.task_ids.join(', ')}}</td><td>{{e.occurrence_count}} / {{e.denominator}}</td></tr></tbody></table></div>
+   </details>
+  </template>
+ </template>
+</template>

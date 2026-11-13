@@ -2,10 +2,13 @@ export type Role='admin'|'analyst'|'viewer';export type User={email:string;role:
 export type Task={task_id:string;name:string;a:number;m:number;b:number};
 export type Package={id:string;name:string;source:string;tasks:Task[];created_at:string};
 export type Dependency={id:string;package_id:string;predecessor:string;successor:string;created_at:string};
-export type Scenario={id:string;name:string;package_id:string;version:number;deadline:number;samples:number;seed:number;snapshot:{package:Package;dependencies:Dependency[]};created_at:string};
+export type StoppageEvent={event_id:string;name:string;probability:number;delay_hours:number;task_ids:string[]};
+export type EventStat=StoppageEvent&{occurrence_count:number;denominator:number;occurrence_rate:number};
+export type ScenarioSnapshot={package:Package;dependencies:Dependency[];events?:StoppageEvent[]};
+export type Scenario={id:string;name:string;package_id:string;version:number;deadline:number;samples:number;seed:number;snapshot:ScenarioSnapshot;created_at:string};
 export type CPMTask={task_id:string;duration:number;es:number;ef:number;ls:number;lf:number;total_float:number;critical:boolean;predecessors:string[];successors:string[]};
 export type CPM={project_finish:number;tasks:CPMTask[];topological_order:string[];critical_tasks:string[];critical_edges:string[][];tolerance_hours:number;virtual_source_tasks:string[];virtual_sink_tasks:string[];lf_basis:string};
-export type Risk={samples:number;seed:number;deadline:number;on_time_count:number;deadline_tolerance_hours:number;on_time_probability:number;mean_finish:number;quantiles:{p05:number;p50:number;p80:number;p95:number};histogram:{left:number;right:number;count:number}[];finish_times:number[];task_criticality:{task_id:string;critical_count:number;denominator:number;criticality:number}[];ranges:(Task&{alpha:number|null;beta:number|null;point_mass:boolean})[];lambda:number;tolerance_hours:number;quantile_method:string};
+export type Risk={samples:number;seed:number;deadline:number;on_time_count:number;deadline_tolerance_hours:number;on_time_probability:number;mean_finish:number;quantiles:{p05:number;p50:number;p80:number;p95:number};histogram:{left:number;right:number;count:number}[];finish_times:number[];task_criticality:{task_id:string;critical_count:number;denominator:number;criticality:number}[];ranges:(Task&{alpha:number|null;beta:number|null;point_mass:boolean})[];lambda:number;tolerance_hours:number;quantile_method:string;independence_assumption?:boolean;event_model?:string;events?:EventStat[];event_any_count?:number;event_any_rate?:number};
 export type Result={baseline:CPM;risk:Risk;tasks:Task[];edges:string[][];checksum:string;assumptions:string[]};
 export type Run={id:string;scenario_id:string;status:'queued'|'running'|'completed'|'failed';result:Result;error:string;created_at:string};
 export type Review={id:string;run_id:string;version:number;note:string;decision:'accepted'|'needs_changes';author:string;created_at:string};
