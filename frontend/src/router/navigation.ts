@@ -1,0 +1,1 @@
+export const navigation=[{id:'overview',label:'工作包总览',code:'01'},{id:'packages',label:'任务与三点工期',code:'02'},{id:'dependencies',label:'FS依赖图',code:'03'},{id:'scenarios',label:'风险情景',code:'04'},{id:'results',label:'基线与关键度',code:'05'},{id:'reviews',label:'交付复核',code:'06'}];

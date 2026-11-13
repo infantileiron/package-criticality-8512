@@ -1,0 +1,1 @@
+<script setup lang="ts">import {RUN_STATUSES} from '../../constants/enums';import type {Run} from '../../types/domain';defineProps<{value:Run['status']}>()</script><template><span class="status" :class="value">{{RUN_STATUSES[value]}}</span></template>

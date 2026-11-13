@@ -1,0 +1,1 @@
+<template><div class="empty"><span>尚无记录 / START WITH A PACKAGE</span><p><slot/></p></div></template>

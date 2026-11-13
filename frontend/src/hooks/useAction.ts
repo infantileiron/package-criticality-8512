@@ -1,0 +1,1 @@
+import {ref} from 'vue';export function useAction(){const busy=ref(false),error=ref(''),notice=ref('');async function act(fn:()=>Promise<unknown>,message='已保存'){busy.value=true;error.value='';notice.value='';try{await fn();notice.value=message}catch(e){error.value=(e as Error).message}finally{busy.value=false}}return {busy,error,notice,act}}
